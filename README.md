@@ -29,6 +29,11 @@ import simple_symbolic_robotics as ssr
 R = ssr.Rx(pi/4)  # Rotation about the x-axis by 45 degrees
 ```
 
+For more use see jupyter notebooks in the [notebooks folder](https://github.com/AdoHaha/simple_symbolic_robotics/tree/master/notebooks):
+<a target="_blank" href="https://colab.research.google.com/github/AdoHaha/simple_symbolic_robotics/blob/master/notebooks/basic_examples.ipynb">
+  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+</a>
+
 ## Contributing
 
 Contributions are welcome! If you'd like to contribute, please fork the repository and use a feature branch. Pull requests are warmly welcome.
