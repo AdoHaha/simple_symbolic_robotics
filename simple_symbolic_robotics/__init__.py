@@ -1,83 +1,109 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import math
-import numpy
-from numpy import cross, eye, dot
+import numpy as np
 from scipy.linalg import norm
 import scipy
 import sympy
+from sympy import pi, acos, sin, latex, pprint
 
-from sympy import lambdify, pprint, pi
+# Helper functions
+platex = lambda res: print(latex(res))  # Print result as LaTeX
+platexN = lambda res: platex(sympy.N(res, 2))  # Print result as rounded LaTeX
+pN = lambda res: pprint(sympy.N(res, 2))  # pprint result after rounding to two decimal spaces
 
-'''Python package providing some simple symbolic helper functions useful in
-kinematics calculations'''
 
-
-def S_sym(wektor):
-    '''returns skew symmetric matrix for wector wektor'''
-
-    S = sympy.Matrix([[0, -wektor[2], wektor[1]], 
-    [wektor[2], 0, -wektor[0]], [-wektor[1], wektor[0], 0]])
-
+def skew_symmetric_matrix(vector: np.ndarray) -> sympy.Matrix:
+    """
+    Returns the skew-symmetric matrix for a given vector.
+    :param vector: A 3-element vector.
+    :return: A 3x3 skew-symmetric matrix.
+    """
+    S = sympy.Matrix([[0, -vector[2], vector[1]],
+                      [vector[2], 0, -vector[0]],
+                      [-vector[1], vector[0], 0]])
     return S
 
+# Alias for backward compatibility
+S_sym = skew_symmetric_matrix
 
 
-def is_rotation_matrix(matrix):
-    w1 = matrix*matrix.T == matrix.T*matrix == diag(1,1,1)
-    return w1
-
-def os_obrot(wek, kat, p_flag=False):
-    '''funkcja zwraca postać macierzy R przy obrocie wokół wektora w
-    o dany kąt, w formie jak najbardziej symboliczne'''
-
-    w = sympy.Matrix(wek)
-    w = w / w.norm()
-
-    A = S_sym(w)
-
-    A_kw = A * A
-
-    wynik = sympy.eye(3) + sympy.sin(kat) * A + (1 - sympy.cos(kat)) * A_kw
-    if(p_flag):
-        print("wektor", wek)
-        print("znormalizowany wektor \n", w)
-        print("Skosnie symetryczna ze znorm \n", A)
-        print("Kwadrat ze skosniesymetrycznej \n", A.dot(A))
-        print("wynik \n", wynik)
-    #print("wynik \n",wynik)
-    return wynik
+def is_rotation_matrix(matrix: sympy.Matrix) -> bool:
+    """
+    Checks if a matrix is a rotation matrix.
+    :param matrix: A square matrix.
+    :return: True if matrix is a rotation matrix, False otherwise.
+    """
+    return matrix * matrix.T == matrix.T * matrix == sympy.diag(1, 1, 1)
 
 
-def R_os_obrot(R):
-    '''oblicza oś i kąt z macierzy R, algorytm zaczerpnięty z kursu SNUx na edx
-    returns theta and axis'''
-    M_rot = numpy.array(R)
-    tr = numpy.trace(M_rot)
-    if(numpy.array_equal(M_rot, eye(3))):
+def axis_angle_rotation(axis: np.ndarray, angle: float, print_flag: bool = False) -> sympy.Matrix:
+    """
+    Returns the rotation matrix for a rotation around a given axis by a given angle.
+    :param axis: A 3-element vector representing the rotation axis.
+    :param angle: The rotation angle in radians.
+    :param print_flag: If True, prints intermediate steps.
+    :return: A 3x3 rotation matrix.
+    """
+    norm_axis = sympy.Matrix(axis) / sympy.Matrix(axis).norm()
+    A = skew_symmetric_matrix(norm_axis)
+    A_squared = A * A
+    result = sympy.eye(3) + sympy.sin(angle) * A + (1 - sympy.cos(angle)) * A_squared
+
+    if print_flag:
+        print(f"Axis: {axis}")
+        print(f"Normalized Axis: \n{norm_axis}")
+        print(f"Skew-symmetric from normalized axis: \n{A}")
+        print(f"Square of skew-symmetric: \n{A_squared}")
+        print(f"Result: \n{result}")
+
+    return result
+
+# Alias for backward compatibility
+os_obrot = axis_angle_rotation
+
+
+def rotation_to_axis_angle(R: sympy.Matrix) -> tuple:
+    """
+    Calculates the axis and angle from a rotation matrix.
+    :param R: A 3x3 rotation matrix.
+    :return: A tuple (axis, angle) where axis is a 3-element vector and angle is in radians.
+    """
+    M_rot = np.array(R)
+    tr = np.trace(M_rot)
+    if np.array_equal(M_rot, np.eye(3)):
         theta = 0
-        w = numpy.zeros((3, 1))  # nothing
-    elif(tr == -1):
+        axis = np.zeros((3, 1))
+    elif tr == -1:
         theta = sympy.pi
-        if(M_rot[2, 2] != -1):
-            w = (1 / sympy.sqrt(2 * (1 + M_rot[2, 2]))) * numpy.array(
-                [[M_rot[0, 2]], [M_rot[1, 2]], [1 + M_rot[2, 2]]])
-        elif(M_rot[1, 1] != -1):
-            w = (1 / sympy.sqrt(2 * (1 + M_rot[1, 1]))) * numpy.array(
-                [[M_rot[0, 1]], [1 + M_rot[1, 1]], [M_rot[2, 1]]])
-        elif(M_rot[0, 0] != -1):
-            w = (1 / sympy.sqrt(2 * (1 + M_rot[0, 0]))) * numpy.array(
-                [[1 + M_rot[0, 0]], [M_rot[1, 0]], [M_rot[2, 0]]])
+        axis = _compute_axis(M_rot)
     else:
         theta = acos((tr - 1) / 2)
-        print(theta)
         MM = M_rot - M_rot.T
-        w = (1 / (2 * sin(theta))) * \
-            sympy.Matrix([[MM[2, 1]], [MM[0, 2]], [MM[1, 0]]])
-    return w, theta
+        axis = (1 / (2 * sin(theta))) * sympy.Matrix([[MM[2, 1]], [MM[0, 2]], [MM[1, 0]]])
+    return axis, theta
 
-def inv_H(H):
-    '''returns inverse of H'''
+def _compute_axis(M_rot):
+    if M_rot[2, 2] != -1:
+        axis = (1 / sympy.sqrt(2 * (1 + M_rot[2, 2]))) * np.array(
+            [[M_rot[0, 2]], [M_rot[1, 2]], [1 + M_rot[2, 2]]])
+    elif M_rot[1, 1] != -1:
+        axis = (1 / sympy.sqrt(2 * (1 + M_rot[1, 1]))) * np.array(
+            [[M_rot[0, 1]], [1 + M_rot[1, 1]], [M_rot[2, 1]]])
+    elif M_rot[0, 0] != -1:
+        axis = (1 / sympy.sqrt(2 * (1 + M_rot[0, 0]))) * np.array(
+            [[1 + M_rot[0, 0]], [M_rot[1, 0]], [M_rot[2, 0]]])
+    return axis
+
+# Alias for backward compatibility
+R_os_obrot = rotation_to_axis_angle
+
+def inverse_homogeneous_transform(H: sympy.Matrix) -> sympy.Matrix:
+    """
+    Computes the inverse of a homogeneous transformation matrix.
+    :param H: A 4x4 homogeneous transformation matrix.
+    :return: The inverse of the homogeneous transformation matrix.
+    """
     R = H[0:3, 0:3]
     t = H[0:3, 3]
     R_inv = R.T
@@ -87,49 +113,83 @@ def inv_H(H):
     H_inv[0:3, 3] = t_inv
     H_inv[3, 3] = 1
     return H_inv
-	
 
-def Rot(wek, theta):
-    R = os_obrot(wek, theta)
+# Alias for backward compatibility
+inv_H = inverse_homogeneous_transform
+
+
+def rotation_matrix(axis: list, theta: float) -> sympy.Matrix:
+    """
+    Creates a rotation matrix for a given axis and angle.
+    :param axis: A list or array representing the axis of rotation.
+    :param theta: The rotation angle in radians.
+    :return: A 4x4 rotation matrix.
+    """
+    R = axis_angle_rotation(axis, theta)
     H = sympy.Matrix.zeros(4, 4)
     H[0:3, 0:3] = R
     H[3, 3] = 1
     return H
-
-
-def Rx(theta):
-    H = Rot([1, 0, 0], theta)
-    return H
-
-
-def Ry(theta):
-    H = Rot([0, 1, 0], theta)
-    return H
-
-
-def Rz(theta):
-    H = Rot([0, 0, 1], theta)
-    return H
+	
+Rot = rotation_matrix
 
 
 
-def trans(wek):
-    wek = sympy.Matrix([wek])
+# Aliases for specific rotations
+def Rx(theta: float) -> sympy.Matrix:
+    """Rotation about the x-axis."""
+    return rotation_matrix([1, 0, 0], theta)
+
+def Ry(theta: float) -> sympy.Matrix:
+    """Rotation about the y-axis."""
+    return rotation_matrix([0, 1, 0], theta)
+
+def Rz(theta: float) -> sympy.Matrix:
+    """Rotation about the z-axis."""
+    return rotation_matrix([0, 0, 1], theta)
+
+
+
+
+
+def translation(translation_vector: list) -> sympy.Matrix:
+    """
+    Creates a translation matrix from a given vector.
+    :param translation_vector: A 3-element list or array for translation.
+    :return: A 4x4 translation matrix.
+    """
+    t = sympy.Matrix([translation_vector])
     H = sympy.Matrix.eye(4)
-    H[0, 3] = wek[0]
-    H[1, 3] = wek[1]
-    H[2, 3] = wek[2]
+    H[0:3, 3] = t.T
     return H
     
-Trans = trans
+Trans = trans = translation
 
-def Tx(tx):
-    return trans([tx,0,0])
+# Aliases for specific translations
+def Tx(tx: float) -> sympy.Matrix:
+    """Translation along the x-axis."""
+    return translation([tx, 0, 0])
 
-def Ty(ty):
-    return trans([0,ty,0])
-def Tz(tz):
-    return trans([0,0,tz])
+def Ty(ty: float) -> sympy.Matrix:
+    """Translation along the y-axis."""
+    return translation([0, ty, 0])
 
-def H(axis,angle,t):
-    return trans(t)*Rot(axis, angle)
+def Tz(tz: float) -> sympy.Matrix:
+    """Translation along the z-axis."""
+    return translation([0, 0, tz])
+
+
+
+
+def homogeneous_transform(axis: list, angle: float, t: list) -> sympy.Matrix:
+    """
+    Creates a homogeneous transformation matrix.
+    :param axis: A list or array representing the axis of rotation.
+    :param angle: The rotation angle in radians.
+    :param t: A list or array representing the translation vector.
+    :return: A 4x4 homogeneous transformation matrix.
+    """
+    return translation(t) * rotation_matrix(axis, angle)
+
+# Alias for backward compatibility
+H = homogeneous_transform
